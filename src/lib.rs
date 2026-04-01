@@ -214,7 +214,7 @@ macro_rules! __define_cvec {
 
             /// Performs bounds check
             #[inline]
-            pub const fn get_read(&mut self, index: usize) -> Option<T> {
+            pub const fn get_read(&self, index: usize) -> Option<T> {
                 if index >= self.len() {
                     return None
                 }
