@@ -5,11 +5,11 @@ use std::borrow::Cow;
 use std::fmt::{Debug, Display, Formatter};
 use std::iter::{Map, Take};
 use std::mem::MaybeUninit;
-use std::ops::{Deref, Index, IndexMut, RangeBounds, Bound, Add, AddAssign, Sub, SubAssign};
+use std::ops::{Add, AddAssign, Bound, Deref, Index, IndexMut, RangeBounds, Sub, SubAssign};
 use std::ptr::{copy_nonoverlapping, slice_from_raw_parts};
 use std::slice::Iter;
-use std::slice::{from_raw_parts, from_raw_parts_mut, SliceIndex};
-use std::str::{from_utf8_unchecked, Utf8Error};
+use std::slice::{SliceIndex, from_raw_parts, from_raw_parts_mut};
+use std::str::{Utf8Error, from_utf8_unchecked};
 use std::{ops, ptr};
 
 #[derive(Debug, Copy, Clone, Eq, PartialEq)]
@@ -193,6 +193,34 @@ macro_rules! __define_cvec {
                     len: 0,
                 }
             }
+
+            /// Performs bounds check
+            #[inline]
+            pub const fn get(&self, index: usize) -> Option<&T> {
+                if index >= self.len() {
+                    return None
+                }
+                return Some(unsafe{self.get_unchecked(index)})
+            }
+
+            /// Performs bounds check
+            #[inline]
+            pub const fn get_mut(&mut self, index: usize) -> Option<&mut T> {
+                if index >= self.len() {
+                    return None
+                }
+                return Some(unsafe{self.get_unchecked_mut(index)})
+            }
+
+            /// Performs bounds check
+            #[inline]
+            pub const fn get_read(&mut self, index: usize) -> Option<T> {
+                if index >= self.len() {
+                    return None
+                }
+                return Some(unsafe{self.get_unchecked_read(index)})
+            }
+
             /// Performs no bounds check
             #[inline]
             pub const unsafe fn get_unchecked(&self, index: usize) -> &T {
@@ -567,7 +595,7 @@ macro_rules! __define_cvec {
                     },
                 }
             }
-            
+
             #[inline]
             pub fn map<F, U>(&self, f: F) -> $name<U, N>
             where
@@ -576,7 +604,7 @@ macro_rules! __define_cvec {
             {
                 $name::<U, N>::from_iter(self.into_iter().copied().map(f))
             }
-            
+
         }
         /// Common methods for str handling
         impl<const N: usize> $name<u8, N> {
@@ -938,10 +966,10 @@ __define_cvec_macros! {CVec, cvec, __cvec, cvecstr, __cvectsr}
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::cvec8::cvec8;
     use crate::CVec;
-    use std::ptr::slice_from_raw_parts;
     use crate::cvec::cvec;
+    use crate::cvec8::cvec8;
+    use std::ptr::slice_from_raw_parts;
 
     #[test]
     fn test_size_of() {
@@ -1195,8 +1223,35 @@ mod tests {
 
         assert_eq!(v.try_push_str("👍tiago").unwrap_err(), ("", "👍tiago"))
     }
-}
 
+    #[test]
+    fn test_get() {
+        let mut v: CVec<u8, 5> = cvec!(1,2,3; *; _);
+        assert_eq!(Some(&1), v.get(0));
+        assert_eq!(Some(&2), v.get(1));
+        assert_eq!(Some(&3), v.get(2));
+        assert_eq!(None, v.get(3));
+        assert_eq!(None, v.get(4));
+        assert_eq!(None, v.get(5));
+        assert_eq!(None, v.get(6));
+
+        assert_eq!(Some(1), v.get_read(0));
+        assert_eq!(Some(2), v.get_read(1));
+        assert_eq!(Some(3), v.get_read(2));
+        assert_eq!(None, v.get_read(3));
+        assert_eq!(None, v.get_read(4));
+        assert_eq!(None, v.get_read(5));
+        assert_eq!(None, v.get_read(6));
+
+        assert_eq!(Some(&mut 1), v.get_mut(0));
+        assert_eq!(Some(&mut 2), v.get_mut(1));
+        assert_eq!(Some(&mut 3), v.get_mut(2));
+        assert_eq!(None, v.get_mut(3));
+        assert_eq!(None, v.get_mut(4));
+        assert_eq!(None, v.get_mut(5));
+        assert_eq!(None, v.get_mut(6));
+    }
+}
 
 #[inline]
 const unsafe fn fill_unchecked<T: Copy>(dst: *mut T, elem: T, count: usize) {
@@ -1240,19 +1295,19 @@ const unsafe fn assume_init_read<T: Copy, const N: usize>(
 }
 
 trait Sealed:
-Send
-+ Sync
-+ Copy
-+ Display
-+ Debug
-+ PartialEq
-+ Add<Output = Self>
-+ AddAssign
-+ Sub<Output = Self>
-+ SubAssign
-+ PartialOrd
-+ TryFrom<usize, Error: Debug>
-+ TryInto<usize, Error: Debug>
+    Send
+    + Sync
+    + Copy
+    + Display
+    + Debug
+    + PartialEq
+    + Add<Output = Self>
+    + AddAssign
+    + Sub<Output = Self>
+    + SubAssign
+    + PartialOrd
+    + TryFrom<usize, Error: Debug>
+    + TryInto<usize, Error: Debug>
 {
     /// The zero value of the integer type.
     const ZERO: Self;
