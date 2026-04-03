@@ -262,6 +262,7 @@ macro_rules! __define_cvec {
                             .add(self.len())
                             .write(MaybeUninit::new(element))
                     };
+                    self.len += 1;
                     Ok(())
                 } else {
                     Err(element)
