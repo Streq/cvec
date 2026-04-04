@@ -503,6 +503,17 @@ macro_rules! __define_cvec {
                 self.remove(0);
                 Some(ret)
             }
+            
+            /// Removes the nth element and returns it
+            #[inline]
+            pub const fn pop_at(&mut self, index: usize) -> Option<T>{
+                if self.len() < index {
+                    return None
+                }
+                let ret = unsafe{ self.get_unchecked_read(index) };
+                self.remove(index);
+                Some(ret)
+            }
 
             #[inline]
             pub fn remove_range<R: RangeBounds<usize>>(&mut self, range: R) {
@@ -1252,6 +1263,19 @@ mod tests {
         assert_eq!(None, v.get_mut(5));
         assert_eq!(None, v.get_mut(6));
     }
+
+
+    #[test]
+    fn test_pop_at() {
+        let mut v: CVec<u8, 5> = cvec!(1,2,3; *; _);
+        assert_eq!(Some(1), v.pop_at(0));
+        assert_eq!(Some(3), v.pop_at(1));
+        assert_eq!(None, v.pop_at(2));
+        assert_eq!(Some(2), v.pop_at(0));
+        assert_eq!(0, v.len());
+    }
+
+
 }
 
 #[inline]
