@@ -256,17 +256,24 @@ macro_rules! __define_cvec {
             pub const fn push_within_capacity(&mut self, element: T) -> Result<(), T> {
                 if self.len() < N {
                     // SAFETY: we just confirmed we got room
-                    unsafe {
-                        self.buf
-                            .as_mut_ptr()
-                            .add(self.len())
-                            .write(MaybeUninit::new(element))
-                    };
-                    self.len += 1;
+                    unsafe { self.push_unchecked(element) };
                     Ok(())
                 } else {
                     Err(element)
                 }
+            }
+
+
+            /// Safe when it's not full
+            #[inline]
+            pub const unsafe fn push_unchecked(&mut self, element: T) {
+                unsafe {
+                    self.buf
+                        .as_mut_ptr()
+                        .add(self.len())
+                        .write(MaybeUninit::new(element))
+                };
+                self.len += 1;
             }
 
             /// Returns an Err with the element if already full
@@ -503,7 +510,7 @@ macro_rules! __define_cvec {
                 self.remove(0);
                 Some(ret)
             }
-            
+
             /// Removes the nth element and returns it
             #[inline]
             pub const fn pop_at(&mut self, index: usize) -> Option<T>{
@@ -975,6 +982,115 @@ __define_cvec_macros! {CVec64, cvec64, __cvec64, cvec64str, __cvec64str}
 __define_cvec!(CVec, usize);
 __define_cvec_macros! {CVec, cvec, __cvec, cvecstr, __cvectsr}
 
+#[inline]
+const unsafe fn fill_unchecked<T: Copy>(dst: *mut T, elem: T, count: usize) {
+    let mut i = 0;
+    while i < count {
+        unsafe {
+            dst.add(i).write(elem);
+        }
+        i += 1;
+    }
+}
+
+/// Filters elements in-place, the returned slice contains the elements for which the predicate is true.
+/// The rest of the input slice (not contained within the return value) does not necessarily contain the elements for which the predicate is false.
+/// If such an outcome is desired, use one of the "partition_by..." functions.
+fn slice_retain_in_place<T: Copy, F>(s: &mut [T], mut pred: F) -> &mut [T]
+where
+    F: FnMut(&mut T) -> bool,
+{
+    let total_count = s.len();
+    let mut false_count = 0;
+    for i in 0..total_count {
+        let e = unsafe { s.get_unchecked_mut(i) };
+        if pred(e) {
+            if false_count > 0 {
+                *unsafe { s.get_unchecked_mut(i - false_count) } = *e;
+            }
+        } else {
+            false_count += 1;
+        }
+    }
+
+    unsafe { s.split_at_mut_unchecked(total_count - false_count).0 }
+}
+
+#[inline]
+const unsafe fn assume_init_read<T: Copy, const N: usize>(
+    maybe_uninit: &[MaybeUninit<T>; N],
+) -> [T; N] {
+    unsafe { *maybe_uninit.as_ptr().cast::<[T; N]>() }
+}
+
+trait Sealed:
+    Send
+    + Sync
+    + Copy
+    + Display
+    + Debug
+    + PartialEq
+    + Add<Output = Self>
+    + AddAssign
+    + Sub<Output = Self>
+    + SubAssign
+    + PartialOrd
+    + TryFrom<usize, Error: Debug>
+    + TryInto<usize, Error: Debug>
+{
+    /// The zero value of the integer type.
+    const ZERO: Self;
+    /// The one value of the integer type.
+    const MAX: Self;
+    /// The maximum value of this type, as a `usize`.
+    const MAX_USIZE: usize;
+
+    /// The one value of the integer type.
+    ///
+    /// It's a function instead of constant because we want to have implementation which panics for
+    /// type `ZeroLenType`
+    fn one() -> Self;
+
+    /// An infallible conversion from `usize` to `LenT`.
+    #[inline]
+    fn from_usize(val: usize) -> Self {
+        val.try_into().unwrap()
+    }
+
+    /// An infallible conversion from `LenT` to `usize`.
+    #[inline]
+    fn into_usize(self) -> usize {
+        self.try_into().unwrap()
+    }
+
+    /// Converts `LenT` into `Some(usize)`, unless it's `Self::MAX`, where it returns `None`.
+    #[inline]
+    fn to_non_max(self) -> Option<usize> {
+        if self == Self::MAX {
+            None
+        } else {
+            Some(self.into_usize())
+        }
+    }
+}
+
+macro_rules! impl_lentype {
+    ($($(#[$meta:meta])* $LenT:ty),*) => {$(
+        $(#[$meta])*
+        impl Sealed for $LenT {
+            const ZERO: Self = 0;
+            const MAX: Self = Self::MAX;
+            const MAX_USIZE: usize = Self::MAX as _;
+
+            fn one() -> Self {
+                1
+            }
+        }
+    )*}
+}
+
+impl_lentype!(u8, u16, u32, u64, usize);
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1275,114 +1391,18 @@ mod tests {
         assert_eq!(0, v.len());
     }
 
-
-}
-
-#[inline]
-const unsafe fn fill_unchecked<T: Copy>(dst: *mut T, elem: T, count: usize) {
-    let mut i = 0;
-    while i < count {
-        unsafe {
-            dst.add(i).write(elem);
-        }
-        i += 1;
+    #[test]
+    fn test_push_unchecked() {
+        let mut v: CVec<u8, 5> = cvec!();
+        unsafe { v.push_unchecked(1) };
+        assert_eq!(&[1], v.as_slice());
+        unsafe { v.push_unchecked(2) };
+        assert_eq!(&[1, 2], v.as_slice());
+        unsafe { v.push_unchecked(3) };
+        assert_eq!(&[1, 2, 3], v.as_slice());
+        unsafe { v.push_unchecked(4) };
+        assert_eq!(&[1, 2, 3, 4], v.as_slice());
+        unsafe { v.push_unchecked(5) };
+        assert_eq!(&[1, 2, 3, 4, 5], v.as_slice());
     }
 }
-
-/// Filters elements in-place, the returned slice contains the elements for which the predicate is true.
-/// The rest of the input slice (not contained within the return value) does not necessarily contain the elements for which the predicate is false.
-/// If such an outcome is desired, use one of the "partition_by..." functions.
-fn slice_retain_in_place<T: Copy, F>(s: &mut [T], mut pred: F) -> &mut [T]
-where
-    F: FnMut(&mut T) -> bool,
-{
-    let total_count = s.len();
-    let mut false_count = 0;
-    for i in 0..total_count {
-        let e = unsafe { s.get_unchecked_mut(i) };
-        if pred(e) {
-            if false_count > 0 {
-                *unsafe { s.get_unchecked_mut(i - false_count) } = *e;
-            }
-        } else {
-            false_count += 1;
-        }
-    }
-
-    unsafe { s.split_at_mut_unchecked(total_count - false_count).0 }
-}
-
-#[inline]
-const unsafe fn assume_init_read<T: Copy, const N: usize>(
-    maybe_uninit: &[MaybeUninit<T>; N],
-) -> [T; N] {
-    unsafe { *maybe_uninit.as_ptr().cast::<[T; N]>() }
-}
-
-trait Sealed:
-    Send
-    + Sync
-    + Copy
-    + Display
-    + Debug
-    + PartialEq
-    + Add<Output = Self>
-    + AddAssign
-    + Sub<Output = Self>
-    + SubAssign
-    + PartialOrd
-    + TryFrom<usize, Error: Debug>
-    + TryInto<usize, Error: Debug>
-{
-    /// The zero value of the integer type.
-    const ZERO: Self;
-    /// The one value of the integer type.
-    const MAX: Self;
-    /// The maximum value of this type, as a `usize`.
-    const MAX_USIZE: usize;
-
-    /// The one value of the integer type.
-    ///
-    /// It's a function instead of constant because we want to have implementation which panics for
-    /// type `ZeroLenType`
-    fn one() -> Self;
-
-    /// An infallible conversion from `usize` to `LenT`.
-    #[inline]
-    fn from_usize(val: usize) -> Self {
-        val.try_into().unwrap()
-    }
-
-    /// An infallible conversion from `LenT` to `usize`.
-    #[inline]
-    fn into_usize(self) -> usize {
-        self.try_into().unwrap()
-    }
-
-    /// Converts `LenT` into `Some(usize)`, unless it's `Self::MAX`, where it returns `None`.
-    #[inline]
-    fn to_non_max(self) -> Option<usize> {
-        if self == Self::MAX {
-            None
-        } else {
-            Some(self.into_usize())
-        }
-    }
-}
-
-macro_rules! impl_lentype {
-    ($($(#[$meta:meta])* $LenT:ty),*) => {$(
-        $(#[$meta])*
-        impl Sealed for $LenT {
-            const ZERO: Self = 0;
-            const MAX: Self = Self::MAX;
-            const MAX_USIZE: usize = Self::MAX as _;
-
-            fn one() -> Self {
-                1
-            }
-        }
-    )*}
-}
-
-impl_lentype!(u8, u16, u32, u64, usize);
