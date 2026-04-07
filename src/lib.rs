@@ -1582,6 +1582,41 @@ mod tests {
         let mut bounded: CVec<u8, 6> = cvec![0, 1, 2, 3, 4, 5; *; 6];
         bounded.remove_range(2..4);
         assert_eq!(bounded.as_slice(), &[0, 1, 4, 5]);
+
+        let mut bounded_inclusive: CVec<u8, 6> = cvec![0, 1, 2, 3, 4, 5; *; 6];
+        bounded_inclusive.remove_range(2..=4);
+        assert_eq!(bounded_inclusive.as_slice(), &[0, 1, 5]);
+
+        let mut full: CVec<u8, 4> = cvec![0, 1, 2, 3; *; 4];
+        full.remove_range(..);
+        assert_eq!(full.as_slice(), &[]);
+
+        let mut empty_prefix: CVec<u8, 4> = cvec![0, 1, 2, 3; *; 4];
+        empty_prefix.remove_range(..0);
+        assert_eq!(empty_prefix.as_slice(), &[0, 1, 2, 3]);
+
+        let mut empty_suffix: CVec<u8, 4> = cvec![0, 1, 2, 3; *; 4];
+        empty_suffix.remove_range(4..);
+        assert_eq!(empty_suffix.as_slice(), &[0, 1, 2, 3]);
+
+        let mut empty_mid: CVec<u8, 4> = cvec![0, 1, 2, 3; *; 4];
+        empty_mid.remove_range(2..2);
+        assert_eq!(empty_mid.as_slice(), &[0, 1, 2, 3]);
+
+        assert_panics(|| {
+            let mut past_end: CVec<u8, 4> = cvec![0, 1, 2, 3; *; 4];
+            past_end.remove_range(..5);
+        });
+
+        assert_panics(|| {
+            let mut suffix_past_len: CVec<u8, 4> = cvec![0, 1, 2, 3; *; 4];
+            suffix_past_len.remove_range(5..);
+        });
+
+        assert_panics(|| {
+            let mut end_before_start: CVec<u8, 4> = cvec![0, 1, 2, 3; *; 4];
+            end_before_start.remove_range(3..2);
+        });
     }
 
     #[test]
