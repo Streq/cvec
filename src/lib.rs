@@ -1103,6 +1103,7 @@ impl_lentype!(u8, u16, u32, u64, usize);
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::cvec::cvec;
     use core::fmt::Write as _;
     use std::panic::{AssertUnwindSafe, catch_unwind};
     use std::ptr::slice_from_raw_parts;
@@ -1113,9 +1114,9 @@ mod tests {
 
     #[test]
     fn test_len() {
-        let empty = CVec::<u8, 0>::new();
-        let partial = CVec::<u8, 3>::from_slice_or_panic(&[1, 2]);
-        let full = CVec::<u8, 2>::from_slice_or_panic(&[7, 8]);
+        let empty: CVec<u8, 0> = cvec!();
+        let partial: CVec<u8, 3> = cvec![1, 2; *; 3];
+        let full: CVec<u8, 2> = cvec![7, 8; *; 2];
         assert_eq!(empty.len(), 0);
         assert_eq!(partial.len(), 2);
         assert_eq!(full.len(), 2);
@@ -1123,14 +1124,15 @@ mod tests {
 
     #[test]
     fn test_is_full() {
-        assert!(CVec::<u8, 0>::new().is_full());
-        assert!(!CVec::<u8, 3>::from_slice_or_panic(&[1, 2]).is_full());
-        assert!(CVec::<u8, 2>::from_slice_or_panic(&[1, 2]).is_full());
+        let empty: CVec<u8, 0> = cvec!();
+        assert!(empty.is_full());
+        assert!(!cvec![1, 2; *; 3].is_full());
+        assert!(cvec![1, 2; *; 2].is_full());
     }
 
     #[test]
     fn test_clear() {
-        let mut v = CVec::<u8, 3>::from_slice_or_panic(&[1, 2, 3]);
+        let mut v: CVec<u8, 3> = cvec![1, 2, 3; *; 3];
         v.clear();
         v.clear();
         assert_eq!(v.len(), 0);
@@ -1139,7 +1141,7 @@ mod tests {
 
     #[test]
     fn test_zeroize() {
-        let mut v = CVec::<u8, 4>::from_slice_or_panic(&[1, 2, 3]);
+        let mut v: CVec<u8, 4> = cvec![1, 2, 3; *; 4];
         v.zeroize();
         assert_eq!(v.len(), 0);
         assert_eq!(unsafe { &*slice_from_raw_parts(v.as_ptr(), 4) }, &[0, 0, 0, 0]);
@@ -1147,93 +1149,96 @@ mod tests {
 
     #[test]
     fn test_fill_remaining() {
-        let mut partial = CVec::<u8, 4>::from_slice_or_panic(&[1, 2]);
+        let mut partial: CVec<u8, 4> = cvec![1, 2; *; 4];
         partial.fill_remaining(9);
         assert_eq!(partial.as_slice(), &[1, 2, 9, 9]);
 
-        let mut full = CVec::<u8, 2>::from_slice_or_panic(&[7, 8]);
+        let mut full: CVec<u8, 2> = cvec![7, 8; *; 2];
         full.fill_remaining(1);
         assert_eq!(full.as_slice(), &[7, 8]);
 
-        let mut zero = CVec::<u8, 0>::new();
+        let mut zero: CVec<u8, 0> = cvec!();
         zero.fill_remaining(1);
         assert_eq!(zero.as_slice(), &[]);
     }
 
     #[test]
     fn test_try_as_array() {
-        assert_eq!(CVec::<u8, 0>::new().try_as_array(), Some(&[]));
-        assert_eq!(CVec::<u8, 3>::from_slice_or_panic(&[1, 2]).try_as_array(), None);
+        let empty: CVec<u8, 0> = cvec!();
+        assert_eq!(empty.try_as_array(), Some(&[]));
+        assert_eq!(cvec![1, 2; *; 3].try_as_array(), None);
         assert_eq!(
-            CVec::<u8, 3>::from_slice_or_panic(&[1, 2, 3]).try_as_array(),
+            cvec![1, 2, 3; *; 3].try_as_array(),
             Some(&[1, 2, 3])
         );
     }
 
     #[test]
     fn test_try_as_array_mut() {
-        let mut empty = CVec::<u8, 0>::new();
+        let mut empty: CVec<u8, 0> = cvec!();
         assert_eq!(empty.try_as_array_mut().map(|a| *a), Some([]));
 
-        let mut partial = CVec::<u8, 3>::from_slice_or_panic(&[1, 2]);
+        let mut partial: CVec<u8, 3> = cvec![1, 2; *; 3];
         assert_eq!(partial.try_as_array_mut(), None);
 
-        let mut full = CVec::<u8, 3>::from_slice_or_panic(&[1, 2, 3]);
+        let mut full: CVec<u8, 3> = cvec![1, 2, 3; *; 3];
         full.try_as_array_mut().unwrap()[1] = 9;
         assert_eq!(full.as_slice(), &[1, 9, 3]);
     }
 
     #[test]
     fn test_as_array_unchecked() {
-        let full = CVec::<u8, 3>::from_slice_or_panic(&[1, 2, 3]);
+        let full: CVec<u8, 3> = cvec![1, 2, 3; *; 3];
         assert_eq!(unsafe { full.as_array_unchecked() }, &[1, 2, 3]);
     }
 
     #[test]
     fn test_as_array_mut_unchecked() {
-        let mut full = CVec::<u8, 3>::from_slice_or_panic(&[1, 2, 3]);
+        let mut full: CVec<u8, 3> = cvec![1, 2, 3; *; 3];
         unsafe { full.as_array_mut_unchecked()[2] = 7 };
         assert_eq!(full.as_slice(), &[1, 2, 7]);
     }
 
     #[test]
     fn test_into_array_if_full() {
-        assert_eq!(CVec::<u8, 0>::new().into_array_if_full(), Some([]));
-        assert_eq!(CVec::<u8, 3>::from_slice_or_panic(&[1, 2]).into_array_if_full(), None);
+        let empty: CVec<u8, 0> = cvec!();
+        assert_eq!(empty.into_array_if_full(), Some([]));
+        assert_eq!(cvec![1, 2; *; 3].into_array_if_full(), None);
         assert_eq!(
-            CVec::<u8, 3>::from_slice_or_panic(&[1, 2, 3]).into_array_if_full(),
+            cvec![1, 2, 3; *; 3].into_array_if_full(),
             Some([1, 2, 3])
         );
     }
 
     #[test]
     fn test_to_array_fill_empty() {
-        assert_eq!(CVec::<u8, 0>::new().to_array_fill_empty(9), []);
+        assert_eq!(cvec![; *; 0].to_array_fill_empty(9), []);
         assert_eq!(
-            CVec::<u8, 4>::from_slice_or_panic(&[1, 2]).to_array_fill_empty(7),
+            cvec![1, 2; *; 4].to_array_fill_empty(7),
             [1, 2, 7, 7]
         );
         assert_eq!(
-            CVec::<u8, 3>::from_slice_or_panic(&[1, 2, 3]).to_array_fill_empty(9),
+            cvec![1, 2, 3; *; 3].to_array_fill_empty(9),
             [1, 2, 3]
         );
     }
 
     #[test]
     fn test_into_array_unchecked() {
-        let full = CVec::<u8, 3>::from_slice_or_panic(&[1, 2, 3]);
+        let full: CVec<u8, 3> = cvec![1, 2, 3; *; 3];
         assert_eq!(unsafe { full.into_array_unchecked() }, [1, 2, 3]);
     }
 
     #[test]
     fn test_into_array_or_panic() {
-        assert_eq!(CVec::<u8, 0>::new().into_array_or_panic(), []);
+        let empty: CVec<u8, 0> = cvec!();
+        assert_eq!(empty.into_array_or_panic(), []);
         assert_eq!(
-            CVec::<u8, 3>::from_slice_or_panic(&[1, 2, 3]).into_array_or_panic(),
+            cvec![1, 2, 3; *; 3].into_array_or_panic(),
             [1, 2, 3]
         );
         assert_panics(|| {
-            let _ = CVec::<u8, 3>::from_slice_or_panic(&[1, 2]).into_array_or_panic();
+            let _ = cvec![1, 2; *; 3].into_array_or_panic();
         });
     }
 
@@ -1248,16 +1253,17 @@ mod tests {
 
     #[test]
     fn test_get() {
-        let v = CVec::<u8, 3>::from_slice_or_panic(&[1, 2]);
+        let v: CVec<u8, 3> = cvec![1, 2; *; 3];
         assert_eq!(v.get(0), Some(&1));
         assert_eq!(v.get(1), Some(&2));
         assert_eq!(v.get(2), None);
-        assert_eq!(CVec::<u8, 0>::new().get(0), None);
+        let empty: CVec<u8, 0> = cvec!();
+        assert_eq!(empty.get(0), None);
     }
 
     #[test]
     fn test_get_mut() {
-        let mut v = CVec::<u8, 3>::from_slice_or_panic(&[1, 2]);
+        let mut v: CVec<u8, 3> = cvec![1, 2; *; 3];
         *v.get_mut(1).unwrap() = 9;
         assert_eq!(v.get_mut(2), None);
         assert_eq!(v.as_slice(), &[1, 9]);
@@ -1265,7 +1271,7 @@ mod tests {
 
     #[test]
     fn test_get_read() {
-        let v = CVec::<u8, 3>::from_slice_or_panic(&[1, 2]);
+        let v: CVec<u8, 3> = cvec![1, 2; *; 3];
         assert_eq!(v.get_read(0), Some(1));
         assert_eq!(v.get_read(1), Some(2));
         assert_eq!(v.get_read(2), None);
@@ -1273,20 +1279,20 @@ mod tests {
 
     #[test]
     fn test_get_unchecked() {
-        let v = CVec::<u8, 2>::from_slice_or_panic(&[4, 5]);
+        let v: CVec<u8, 2> = cvec![4, 5; *; 2];
         assert_eq!(unsafe { *v.get_unchecked(1) }, 5);
     }
 
     #[test]
     fn test_get_unchecked_mut() {
-        let mut v = CVec::<u8, 2>::from_slice_or_panic(&[4, 5]);
+        let mut v: CVec<u8, 2> = cvec![4, 5; *; 2];
         unsafe { *v.get_unchecked_mut(0) = 9 };
         assert_eq!(v.as_slice(), &[9, 5]);
     }
 
     #[test]
     fn test_get_unchecked_read() {
-        let v = CVec::<u8, 2>::from_slice_or_panic(&[4, 5]);
+        let v: CVec<u8, 2> = cvec![4, 5; *; 2];
         assert_eq!(unsafe { v.get_unchecked_read(0) }, 4);
     }
 
@@ -1336,14 +1342,14 @@ mod tests {
         let mut zero = CVec::<u8, 0>::new();
         assert_eq!(zero.push_front_within_capacity(1), Err(1));
 
-        let mut v = CVec::<u8, 3>::from_slice_or_panic(&[2, 3]);
+        let mut v: CVec<u8, 3> = cvec![2, 3; *; 3];
         assert_eq!(v.push_front_within_capacity(1), Ok(()));
         assert_eq!(v.as_slice(), &[1, 2, 3]);
     }
 
     #[test]
     fn test_insert_within_capacity() {
-        let mut v = CVec::<u8, 4>::from_slice_or_panic(&[1, 3]);
+        let mut v: CVec<u8, 4> = cvec![1, 3; *; 4];
         assert_eq!(v.insert_within_capacity(1, 2), Ok(()));
         assert_eq!(v.insert_within_capacity(3, 4), Ok(()));
         assert_eq!(v.as_slice(), &[1, 2, 3, 4]);
@@ -1353,20 +1359,20 @@ mod tests {
 
     #[test]
     fn test_insert_slice_within_capacity() {
-        let mut v = CVec::<u8, 6>::from_slice_or_panic(&[0, 1, 4, 5]);
+        let mut v: CVec<u8, 6> = cvec![0, 1, 4, 5; *; 6];
         assert_eq!(v.insert_slice_within_capacity(2, &[2, 3]), Ok(()));
         assert_eq!(v.as_slice(), &[0, 1, 2, 3, 4, 5]);
 
-        let mut no_op = CVec::<u8, 3>::from_slice_or_panic(&[1]);
+        let mut no_op: CVec<u8, 3> = cvec![1; *; 3];
         assert_eq!(no_op.insert_slice_within_capacity(0, &[]), Ok(()));
 
-        let mut oob = CVec::<u8, 3>::from_slice_or_panic(&[1]);
+        let mut oob: CVec<u8, 3> = cvec![1; *; 3];
         assert_eq!(
             oob.insert_slice_within_capacity(5, &[2]),
             Err(InsertionErr::OutOfBounds { by: 4 })
         );
 
-        let mut full = CVec::<u8, 3>::from_slice_or_panic(&[1, 2]);
+        let mut full: CVec<u8, 3> = cvec![1, 2; *; 3];
         assert_eq!(
             full.insert_slice_within_capacity(1, &[9, 9]),
             Err(InsertionErr::NotEnoughSpace {
@@ -1386,32 +1392,33 @@ mod tests {
             })
         );
 
-        let mut v = CVec::<u8, 4>::from_slice_or_panic(&[1, 2]);
+        let mut v: CVec<u8, 4> = cvec![1, 2; *; 4];
         assert_eq!(v.push_slice_within_capacity(&[3, 4]), Ok(()));
         assert_eq!(v.as_slice(), &[1, 2, 3, 4]);
     }
 
     #[test]
     fn test_as_ptr() {
-        let v = CVec::<u8, 3>::from_slice_or_panic(&[1, 2, 3]);
+        let v: CVec<u8, 3> = cvec![1, 2, 3; *; 3];
         assert_eq!(v.as_ptr(), v.as_slice().as_ptr());
     }
 
     #[test]
     fn test_as_mut_ptr() {
-        let mut v = CVec::<u8, 3>::from_slice_or_panic(&[1, 2, 3]);
+        let mut v: CVec<u8, 3> = cvec![1, 2, 3; *; 3];
         assert_eq!(v.as_mut_ptr(), v.as_mut_slice().as_mut_ptr());
     }
 
     #[test]
     fn test_as_slice() {
-        assert_eq!(CVec::<u8, 0>::new().as_slice(), &[]);
-        assert_eq!(CVec::<u8, 3>::from_slice_or_panic(&[1, 2]).as_slice(), &[1, 2]);
+        let empty: CVec<u8, 0> = cvec!();
+        assert_eq!(empty.as_slice(), &[]);
+        assert_eq!(cvec![1, 2; *; 3].as_slice(), &[1, 2]);
     }
 
     #[test]
     fn test_as_mut_slice() {
-        let mut v = CVec::<u8, 3>::from_slice_or_panic(&[1, 2]);
+        let mut v: CVec<u8, 3> = cvec![1, 2; *; 3];
         v.as_mut_slice()[1] = 9;
         assert_eq!(v.as_slice(), &[1, 9]);
     }
@@ -1422,11 +1429,11 @@ mod tests {
         assert_eq!(zero.try_append_slice(&[]), Ok(()));
         assert_eq!(zero.try_append_slice(&[1]), Err(&[][..]));
 
-        let mut v = CVec::<u8, 3>::from_slice_or_panic(&[1]);
+        let mut v: CVec<u8, 3> = cvec![1; *; 3];
         assert_eq!(v.try_append_slice(&[2, 3]), Ok(()));
         assert_eq!(v.as_slice(), &[1, 2, 3]);
 
-        let mut limited = CVec::<u8, 3>::from_slice_or_panic(&[1]);
+        let mut limited: CVec<u8, 3> = cvec![1; *; 3];
         assert_eq!(limited.try_append_slice(&[2, 3, 4]), Err(&[2, 3][..]));
     }
 
@@ -1436,29 +1443,29 @@ mod tests {
         assert_eq!(zero.append_slice_or_crop(&[]), None);
         assert_eq!(zero.append_slice_or_crop(&[1]), Some(&[1][..]));
 
-        let mut v = CVec::<u8, 4>::from_slice_or_panic(&[1]);
+        let mut v: CVec<u8, 4> = cvec![1; *; 4];
         assert_eq!(v.append_slice_or_crop(&[2, 3, 4]), None);
         assert_eq!(v.as_slice(), &[1, 2, 3, 4]);
 
-        let mut cropped = CVec::<u8, 4>::from_slice_or_panic(&[1]);
+        let mut cropped: CVec<u8, 4> = cvec![1; *; 4];
         assert_eq!(cropped.append_slice_or_crop(&[2, 3, 4, 5]), Some(&[5][..]));
         assert_eq!(cropped.as_slice(), &[1, 2, 3, 4]);
     }
 
     #[test]
     fn test_append_slice_or_panic() {
-        let mut v = CVec::<u8, 3>::from_slice_or_panic(&[1]);
+        let mut v: CVec<u8, 3> = cvec![1; *; 3];
         v.append_slice_or_panic(&[2, 3]);
         assert_eq!(v.as_slice(), &[1, 2, 3]);
         assert_panics(|| {
-            let mut full = CVec::<u8, 2>::from_slice_or_panic(&[1]);
+            let mut full: CVec<u8, 2> = cvec![1; *; 2];
             full.append_slice_or_panic(&[2, 3]);
         });
     }
 
     #[test]
     fn test_append_slice_unchecked() {
-        let mut v = CVec::<u8, 3>::from_slice_or_panic(&[1]);
+        let mut v: CVec<u8, 3> = cvec![1; *; 3];
         unsafe { v.append_slice_unchecked(&[2, 3]) };
         assert_eq!(v.as_slice(), &[1, 2, 3]);
     }
@@ -1493,18 +1500,18 @@ mod tests {
 
     #[test]
     fn test_retain() {
-        let mut v = CVec::<u8, 5>::from_slice_or_panic(&[1, 2, 3, 4]);
+        let mut v: CVec<u8, 5> = cvec![1, 2, 3, 4; *; 5];
         v.retain(|n| n % 2 == 0);
         assert_eq!(v.as_slice(), &[2, 4]);
 
-        let mut none = CVec::<u8, 3>::from_slice_or_panic(&[1, 3]);
+        let mut none: CVec<u8, 3> = cvec![1, 3; *; 3];
         none.retain(|_| false);
         assert_eq!(none.as_slice(), &[]);
     }
 
     #[test]
     fn test_retain_mut() {
-        let mut v = CVec::<u8, 5>::from_slice_or_panic(&[1, 2, 3, 4]);
+        let mut v: CVec<u8, 5> = cvec![1, 2, 3, 4; *; 5];
         v.retain_mut(|n| {
             *n += 1;
             *n % 2 == 0
@@ -1514,9 +1521,11 @@ mod tests {
 
     #[test]
     fn test_remaining_capacity() {
-        assert_eq!(CVec::<u8, 0>::new().remaining_capacity(), 0);
-        assert_eq!(CVec::<u8, 4>::new().remaining_capacity(), 4);
-        assert_eq!(CVec::<u8, 4>::from_slice_or_panic(&[1, 2]).remaining_capacity(), 2);
+        let empty: CVec<u8, 0> = cvec!();
+        let regular: CVec<u8, 4> = cvec![; *; 4];
+        assert_eq!(empty.remaining_capacity(), 0);
+        assert_eq!(regular.remaining_capacity(), 4);
+        assert_eq!(cvec![1, 2; *; 4].remaining_capacity(), 2);
     }
 
     #[test]
@@ -1527,10 +1536,10 @@ mod tests {
 
     #[test]
     fn test_pop() {
-        let mut empty = CVec::<u8, 0>::new();
+        let mut empty: CVec<u8, 0> = cvec![];
         assert_eq!(empty.pop(), None);
 
-        let mut v = CVec::<u8, 2>::from_slice_or_panic(&[1, 2]);
+        let mut v: CVec<u8, 2> = cvec![1, 2; *; 2];
         assert_eq!(v.pop(), Some(2));
         assert_eq!(v.pop(), Some(1));
         assert_eq!(v.pop(), None);
@@ -1541,7 +1550,7 @@ mod tests {
         let mut empty = CVec::<u8, 0>::new();
         assert_eq!(empty.pop_front(), None);
 
-        let mut v = CVec::<u8, 3>::from_slice_or_panic(&[1, 2, 3]);
+        let mut v: CVec<u8, 3> = cvec![1, 2, 3; *; 3];
         assert_eq!(v.pop_front(), Some(1));
         assert_eq!(v.pop_front(), Some(2));
         assert_eq!(v.pop_front(), Some(3));
@@ -1550,7 +1559,7 @@ mod tests {
 
     #[test]
     fn test_pop_at() {
-        let mut v = CVec::<u8, 4>::from_slice_or_panic(&[1, 2, 3]);
+        let mut v: CVec<u8, 4> = cvec![1, 2, 3; *; 4];
         assert_eq!(v.pop_at(0), Some(1));
         assert_eq!(v.pop_at(1), Some(3));
         assert_eq!(v.pop_at(1), None);
@@ -1560,22 +1569,22 @@ mod tests {
 
     #[test]
     fn test_remove_range() {
-        let mut prefix = CVec::<u8, 5>::from_slice_or_panic(&[0, 1, 2, 3, 4]);
+        let mut prefix: CVec<u8, 5> = cvec![0, 1, 2, 3, 4; *; 5];
         prefix.remove_range(..2);
         assert_eq!(prefix.as_slice(), &[2, 3, 4]);
 
-        let mut suffix = CVec::<u8, 5>::from_slice_or_panic(&[0, 1, 2, 3, 4]);
+        let mut suffix: CVec<u8, 5> = cvec![0, 1, 2, 3, 4; *; 5];
         suffix.remove_range(3..);
         assert_eq!(suffix.as_slice(), &[0, 1, 2]);
 
-        let mut bounded = CVec::<u8, 6>::from_slice_or_panic(&[0, 1, 2, 3, 4, 5]);
+        let mut bounded: CVec<u8, 6> = cvec![0, 1, 2, 3, 4, 5; *; 6];
         bounded.remove_range(2..4);
         assert_eq!(bounded.as_slice(), &[0, 1, 4, 5]);
     }
 
     #[test]
     fn test_remove_contiguous_or_panic() {
-        let mut v = CVec::<u8, 6>::from_slice_or_panic(&[0, 1, 2, 3, 4, 5]);
+        let mut v: CVec<u8, 6> = cvec![0, 1, 2, 3, 4, 5; *; 6];
         v.remove_contiguous_or_panic(2, 0);
         assert_eq!(v.as_slice(), &[0, 1, 2, 3, 4, 5]);
         v.remove_contiguous_or_panic(1, 3);
@@ -1583,20 +1592,20 @@ mod tests {
         v.remove_contiguous_or_panic(1, 2);
         assert_eq!(v.as_slice(), &[0]);
         assert_panics(|| {
-            let mut bad = CVec::<u8, 2>::from_slice_or_panic(&[1]);
+            let mut bad: CVec<u8, 2> = cvec![1; *; 2];
             bad.remove_contiguous_or_panic(1, 1);
         });
     }
 
     #[test]
     fn test_remove() {
-        let mut v = CVec::<u8, 3>::from_slice_or_panic(&[1, 2, 3]);
+        let mut v: CVec<u8, 3> = cvec![1, 2, 3; *; 3];
         v.remove(1);
         assert_eq!(v.as_slice(), &[1, 3]);
         v.remove(0);
         assert_eq!(v.as_slice(), &[3]);
         assert_panics(|| {
-            let mut bad = CVec::<u8, 1>::from_slice_or_panic(&[1]);
+            let mut bad: CVec<u8, 1> = cvec![1; *; 1];
             bad.remove(1);
         });
     }
@@ -1741,7 +1750,7 @@ mod tests {
 
     #[test]
     fn test_trait_impls_and_fmt_write() {
-        let v = CVec::<u8, 3>::from_iter([1, 2, 3]);
+        let v: CVec<u8, 3> = cvec![1, 2, 3; *; 3];
         let cloned = v.clone();
         let copied = v;
         let collected: Vec<_> = copied.into_iter().collect();
