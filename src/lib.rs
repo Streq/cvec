@@ -54,10 +54,10 @@ macro_rules! __define_cvec {
                 self.len as usize
             }
 
-            /// Returns true if `len == N`.
+            /// Returns true if `len >= N`.
             #[inline]
             pub const fn is_full(&self) -> bool {
-                self.len() == N
+                self.len() >= N
             }
 
             /// Sets `len` to 0, does not write to the buffer itself
@@ -254,13 +254,13 @@ macro_rules! __define_cvec {
             /// Returns an Err with the element if already full
             #[inline]
             pub const fn push_within_capacity(&mut self, element: T) -> Result<(), T> {
-                if self.len() < N {
-                    // SAFETY: we just confirmed we got room
-                    unsafe { self.push_unchecked(element) };
-                    Ok(())
-                } else {
-                    Err(element)
-                }
+                if self.is_full() {
+                    return Err(element)
+                } 
+                // SAFETY: we just confirmed we got room
+                unsafe { self.push_unchecked(element) };
+                Ok(())
+
             }
 
 
@@ -282,13 +282,10 @@ macro_rules! __define_cvec {
                 self.insert_within_capacity(0, element)
             }
 
-            /// Returns an Err with the element if already full
+            /// Returns an Err with the element if already full or out of bounds
             #[inline]
             pub const fn insert_within_capacity(&mut self, at: usize, element: T) -> Result<(), T> {
-                if self.len() == N {
-                    return Err(element)
-                }
-                if self.len() < at { // out of bounds
+                if !self.is_insert_ok(at) {
                     return Err(element)
                 }
 
@@ -514,12 +511,24 @@ macro_rules! __define_cvec {
             /// Removes the nth element and returns it
             #[inline]
             pub const fn pop_at(&mut self, index: usize) -> Option<T>{
-                if self.len() < index {
+                if !self.is_read_ok(index) {
                     return None
                 }
                 let ret = unsafe{ self.get_unchecked_read(index) };
                 self.remove(index);
                 Some(ret)
+            }
+            
+            
+            #[inline]
+            const fn is_read_ok(&self, index: usize) -> bool{
+                self.len() > index
+            }
+            
+            
+            #[inline]
+            const fn is_insert_ok(&self, index: usize) -> bool{
+                self.len() >= index && !self.is_full()
             }
 
             #[inline]
@@ -1389,6 +1398,7 @@ mod tests {
         assert_eq!(None, v.pop_at(2));
         assert_eq!(Some(2), v.pop_at(0));
         assert_eq!(0, v.len());
+        assert_eq!(None, v.pop_at(0));
     }
 
     #[test]
