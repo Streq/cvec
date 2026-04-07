@@ -534,17 +534,19 @@ macro_rules! __define_cvec {
             #[inline]
             pub fn remove_range<R: RangeBounds<usize>>(&mut self, range: R) {
                 use Bound::*;
+                let len = self.len();
                 let start = match range.start_bound() {
                     Included(n) => *n,
-                    Excluded(n) => *n + 1,
+                    Excluded(n) => n.checked_add(1).expect("out of bounds!"),
                     Unbounded => 0,
                 };
-                let end = match range.end_bound() {
-                    Included(n) => *n,
-                    Excluded(n) => *n - 1,
-                    Unbounded => self.len(),
+                let end_exclusive = match range.end_bound() {
+                    Included(n) => n.checked_add(1).expect("out of bounds!"),
+                    Excluded(n) => *n,
+                    Unbounded => len,
                 };
-                self.remove_contiguous_or_panic(start, end - start);
+                assert!(start <= end_exclusive, "out of bounds!");
+                self.remove_contiguous_or_panic(start, end_exclusive - start);
             }
 
             /// Before:
