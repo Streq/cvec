@@ -256,7 +256,7 @@ macro_rules! __define_cvec {
             pub const fn push_within_capacity(&mut self, element: T) -> Result<(), T> {
                 if self.is_full() {
                     return Err(element)
-                } 
+                }
                 // SAFETY: we just confirmed we got room
                 unsafe { self.push_unchecked(element) };
                 Ok(())
@@ -518,14 +518,14 @@ macro_rules! __define_cvec {
                 self.remove(index);
                 Some(ret)
             }
-            
-            
+
+
             #[inline]
             const fn is_read_ok(&self, index: usize) -> bool{
                 self.len() > index
             }
-            
-            
+
+
             #[inline]
             const fn is_insert_ok(&self, index: usize) -> bool{
                 self.len() >= index && !self.is_full()
@@ -769,6 +769,7 @@ macro_rules! __define_cvec {
                 let mut ret = Self::new();
                 let mut i = 0;
                 for t in iter {
+                    assert!(i < N, "iterator contains more than {} elements", N);
                     ret.buf[i] = MaybeUninit::new(t);
                     i += 1;
                 }
@@ -1146,7 +1147,10 @@ mod tests {
         let mut v: CVec<u8, 4> = cvec![1, 2, 3; *; 4];
         v.zeroize();
         assert_eq!(v.len(), 0);
-        assert_eq!(unsafe { &*slice_from_raw_parts(v.as_ptr(), 4) }, &[0, 0, 0, 0]);
+        assert_eq!(
+            unsafe { &*slice_from_raw_parts(v.as_ptr(), 4) },
+            &[0, 0, 0, 0]
+        );
     }
 
     #[test]
@@ -1169,10 +1173,7 @@ mod tests {
         let empty: CVec<u8, 0> = cvec!();
         assert_eq!(empty.try_as_array(), Some(&[]));
         assert_eq!(cvec![1, 2; *; 3].try_as_array(), None);
-        assert_eq!(
-            cvec![1, 2, 3; *; 3].try_as_array(),
-            Some(&[1, 2, 3])
-        );
+        assert_eq!(cvec![1, 2, 3; *; 3].try_as_array(), Some(&[1, 2, 3]));
     }
 
     #[test]
@@ -1206,23 +1207,14 @@ mod tests {
         let empty: CVec<u8, 0> = cvec!();
         assert_eq!(empty.into_array_if_full(), Some([]));
         assert_eq!(cvec![1, 2; *; 3].into_array_if_full(), None);
-        assert_eq!(
-            cvec![1, 2, 3; *; 3].into_array_if_full(),
-            Some([1, 2, 3])
-        );
+        assert_eq!(cvec![1, 2, 3; *; 3].into_array_if_full(), Some([1, 2, 3]));
     }
 
     #[test]
     fn test_to_array_fill_empty() {
         assert_eq!(cvec![; *; 0].to_array_fill_empty(9), []);
-        assert_eq!(
-            cvec![1, 2; *; 4].to_array_fill_empty(7),
-            [1, 2, 7, 7]
-        );
-        assert_eq!(
-            cvec![1, 2, 3; *; 3].to_array_fill_empty(9),
-            [1, 2, 3]
-        );
+        assert_eq!(cvec![1, 2; *; 4].to_array_fill_empty(7), [1, 2, 7, 7]);
+        assert_eq!(cvec![1, 2, 3; *; 3].to_array_fill_empty(9), [1, 2, 3]);
     }
 
     #[test]
@@ -1235,10 +1227,7 @@ mod tests {
     fn test_into_array_or_panic() {
         let empty: CVec<u8, 0> = cvec!();
         assert_eq!(empty.into_array_or_panic(), []);
-        assert_eq!(
-            cvec![1, 2, 3; *; 3].into_array_or_panic(),
-            [1, 2, 3]
-        );
+        assert_eq!(cvec![1, 2, 3; *; 3].into_array_or_panic(), [1, 2, 3]);
         assert_panics(|| {
             let _ = cvec![1, 2; *; 3].into_array_or_panic();
         });
@@ -1533,7 +1522,10 @@ mod tests {
     #[test]
     fn test_from_array_as_full() {
         assert_eq!(CVec::<u8, 0>::from_array_as_full(&[]).as_slice(), &[]);
-        assert_eq!(CVec::<u8, 3>::from_array_as_full(&[1, 2, 3]).as_slice(), &[1, 2, 3]);
+        assert_eq!(
+            CVec::<u8, 3>::from_array_as_full(&[1, 2, 3]).as_slice(),
+            &[1, 2, 3]
+        );
     }
 
     #[test]
@@ -1655,8 +1647,14 @@ mod tests {
 
     #[test]
     fn test_from_elem_up_to_or_panic() {
-        assert_eq!(CVec::<u8, 3>::from_elem_up_to_or_panic(9, 0).as_slice(), &[]);
-        assert_eq!(CVec::<u8, 3>::from_elem_up_to_or_panic(9, 2).as_slice(), &[9, 9]);
+        assert_eq!(
+            CVec::<u8, 3>::from_elem_up_to_or_panic(9, 0).as_slice(),
+            &[]
+        );
+        assert_eq!(
+            CVec::<u8, 3>::from_elem_up_to_or_panic(9, 2).as_slice(),
+            &[9, 9]
+        );
         assert_panics(|| {
             let _ = CVec::<u8, 2>::from_elem_up_to_or_panic(9, 3);
         });
@@ -1666,7 +1664,9 @@ mod tests {
     fn test_map() {
         assert_eq!(CVec::<u8, 0>::new().map(|n| n as u16).as_slice(), &[]);
         assert_eq!(
-            CVec::<u8, 3>::from_slice_or_panic(&[1, 2, 3]).map(|n| n as u16 * 10).as_slice(),
+            CVec::<u8, 3>::from_slice_or_panic(&[1, 2, 3])
+                .map(|n| n as u16 * 10)
+                .as_slice(),
             &[10, 20, 30]
         );
     }
@@ -1674,7 +1674,10 @@ mod tests {
     #[test]
     fn test_from_str_or_panic() {
         assert_eq!(CVec::<u8, 0>::from_str_or_panic("").as_str(), Ok(""));
-        assert_eq!(CVec::<u8, 4>::from_str_or_panic("hola").as_str(), Ok("hola"));
+        assert_eq!(
+            CVec::<u8, 4>::from_str_or_panic("hola").as_str(),
+            Ok("hola")
+        );
         assert_panics(|| {
             let _ = CVec::<u8, 3>::from_str_or_panic("hola");
         });
@@ -1689,7 +1692,10 @@ mod tests {
 
     #[test]
     fn test_as_str_or_panic() {
-        assert_eq!(CVec::<u8, 4>::from_str_or_panic("hola").as_str_or_panic(), "hola");
+        assert_eq!(
+            CVec::<u8, 4>::from_str_or_panic("hola").as_str_or_panic(),
+            "hola"
+        );
         assert_panics(|| {
             let _ = CVec::<u8, 1>::from_slice_or_panic(&[0xff]).as_str_or_panic();
         });
@@ -1698,8 +1704,15 @@ mod tests {
     #[test]
     fn test_as_str() {
         assert_eq!(CVec::<u8, 0>::new().as_str(), Ok(""));
-        assert_eq!(CVec::<u8, 4>::from_str_or_panic("hola").as_str(), Ok("hola"));
-        assert!(CVec::<u8, 1>::from_slice_or_panic(&[0xff]).as_str().is_err());
+        assert_eq!(
+            CVec::<u8, 4>::from_str_or_panic("hola").as_str(),
+            Ok("hola")
+        );
+        assert!(
+            CVec::<u8, 1>::from_slice_or_panic(&[0xff])
+                .as_str()
+                .is_err()
+        );
     }
 
     #[test]
@@ -1781,7 +1794,10 @@ mod tests {
     #[test]
     fn test_size_of() {
         assert_eq!(size_of::<CVec8<u8, 3>>(), 4);
-        assert_eq!(size_of::<CVec8<u8, { u8::MAX as usize }>>(), u8::MAX as usize + 1);
+        assert_eq!(
+            size_of::<CVec8<u8, { u8::MAX as usize }>>(),
+            u8::MAX as usize + 1
+        );
         assert_eq!(size_of::<CVec16<u8, 3>>(), 6);
     }
 
@@ -1801,5 +1817,12 @@ mod tests {
         let mut writer = CVec::<u8, 6>::new();
         write!(&mut writer, "abc{}", 'd').unwrap();
         assert_eq!(writer.as_str(), Ok("abcd"));
+    }
+
+    #[test]
+    #[should_panic(expected = "iterator contains more than 3 elements")]
+    fn test_from_iter_out_of_bounds() {
+        let iter = [1, 2, 3, 4].into_iter();
+        let _: CVec<i32, 3> = CVec::from_iter(iter);
     }
 }
