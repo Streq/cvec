@@ -175,7 +175,7 @@ macro_rules! __define_cvec {
                 unsafe { assume_init_read(&self.buf) }
             }
 
-            /// Panics if N
+            /// Panics if not full
             #[inline]
             pub const fn into_array_or_panic(self) -> [T; N] {
                 assert!(self.len() >= N);
