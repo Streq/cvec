@@ -806,7 +806,7 @@ macro_rules! __define_cvec {
         }
         impl<T: Copy + Debug, const N: usize> Debug for $name<T, N> {
             fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
-                Debug::fmt(&**self, f)
+                write!(f, "{}<_,{}>({:?})", stringify!($name), N, &**self)
             }
         }
         impl<T: Copy, I: SliceIndex<[T]>, const N: usize> Index<I> for $name<T, N> {
@@ -1824,5 +1824,10 @@ mod tests {
     fn test_from_iter_out_of_bounds() {
         let iter = [1, 2, 3, 4].into_iter();
         let _: CVec<i32, 3> = CVec::from_iter(iter);
+    }
+    #[test]
+    fn test_debug() {
+        let c = cvec!(1,2,3; *; 5);
+        println!("{c:?}");
     }
 }
