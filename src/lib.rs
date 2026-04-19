@@ -840,6 +840,68 @@ macro_rules! __define_cvec {
         }
 
 
+
+        #[cfg(feature = "serde")]
+        impl<T, const N: usize> serde::Serialize for $name<T, N>
+        where
+            T: Copy + serde::Serialize,
+        {
+            fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+            where
+                S: serde::Serializer,
+            {
+                self.as_slice().serialize(serializer)
+            }
+        }
+
+        #[cfg(feature = "serde")]
+        impl<'de, T, const N: usize> serde::Deserialize<'de> for $name<T, N>
+        where
+            T: Copy + serde::Deserialize<'de>,
+        {
+            fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+            where
+                D: serde::Deserializer<'de>,
+            {
+                use core::fmt;
+                use serde::de::{self, SeqAccess, Visitor};
+
+                struct CVecVisitor<T, const N: usize>(core::marker::PhantomData<T>);
+
+                impl<'de, T, const N: usize> Visitor<'de> for CVecVisitor<T, N>
+                where
+                    T: Copy + serde::Deserialize<'de>,
+                {
+                    type Value = $name<T, N>;
+
+                    fn expecting(&self, f: &mut fmt::Formatter) -> fmt::Result {
+                        write!(f, "a sequence of at most {} elements", N)
+                    }
+
+                    fn visit_seq<A>(self, mut seq: A) -> Result<Self::Value, A::Error>
+                    where
+                        A: SeqAccess<'de>,
+                    {
+                        let mut out = Self::Value::new();
+
+                        while let Some(value) = seq.next_element::<T>()? {
+                            if out.len == N as $len_type {
+                                return Err(de::Error::invalid_length(N + 1, &self));
+                            }
+                            // SAFETY: we just checked
+                            unsafe { out.push_unchecked(value) };
+                        }
+
+                        Ok(out)
+                    }
+                }
+
+                deserializer.deserialize_seq(CVecVisitor::<T, N>(core::marker::PhantomData))
+            }
+        }
+
+
+
         __impl_cvec_eq! { $name, CVec8 }
         __impl_cvec_eq!{ $name, CVec16 }
         __impl_cvec_eq!{ $name, CVec32 }
@@ -1105,8 +1167,8 @@ impl_lentype!(u8, u16, u32, u64, usize);
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use crate::cvec::cvec;
+    use crate::{CVec, CVec8, CVec16, InsertionErr};
     use core::fmt::Write as _;
     use std::panic::{AssertUnwindSafe, catch_unwind};
     use std::ptr::slice_from_raw_parts;
@@ -1139,7 +1201,7 @@ mod tests {
         v.clear();
         v.clear();
         assert_eq!(v.len(), 0);
-        assert_eq!(v.as_slice(), &[]);
+        assert!(v.as_slice().is_empty());
     }
 
     #[test]
@@ -1165,7 +1227,7 @@ mod tests {
 
         let mut zero: CVec<u8, 0> = cvec!();
         zero.fill_remaining(1);
-        assert_eq!(zero.as_slice(), &[]);
+        assert!(zero.as_slice().is_empty());
     }
 
     #[test]
@@ -1212,7 +1274,7 @@ mod tests {
 
     #[test]
     fn test_to_array_fill_empty() {
-        assert_eq!(cvec![; *; 0].to_array_fill_empty(9), []);
+        assert!(cvec![; *; 0].to_array_fill_empty(9).is_empty());
         assert_eq!(cvec![1, 2; *; 4].to_array_fill_empty(7), [1, 2, 7, 7]);
         assert_eq!(cvec![1, 2, 3; *; 3].to_array_fill_empty(9), [1, 2, 3]);
     }
@@ -1226,7 +1288,7 @@ mod tests {
     #[test]
     fn test_into_array_or_panic() {
         let empty: CVec<u8, 0> = cvec!();
-        assert_eq!(empty.into_array_or_panic(), []);
+        assert!(empty.into_array_or_panic().is_empty());
         assert_eq!(cvec![1, 2, 3; *; 3].into_array_or_panic(), [1, 2, 3]);
         assert_panics(|| {
             let _ = cvec![1, 2; *; 3].into_array_or_panic();
@@ -1237,8 +1299,8 @@ mod tests {
     fn test_new() {
         let zero = CVec::<u8, 0>::new();
         let regular = CVec::<u8, 4>::new();
-        assert_eq!(zero.as_slice(), &[]);
-        assert_eq!(regular.as_slice(), &[]);
+        assert!(zero.as_slice().is_empty());
+        assert!(regular.as_slice().is_empty());
         assert_eq!(regular.remaining_capacity(), 4);
     }
 
@@ -1403,7 +1465,7 @@ mod tests {
     #[test]
     fn test_as_slice() {
         let empty: CVec<u8, 0> = cvec!();
-        assert_eq!(empty.as_slice(), &[]);
+        assert!(empty.as_slice().is_empty());
         assert_eq!(cvec![1, 2; *; 3].as_slice(), &[1, 2]);
     }
 
@@ -1463,7 +1525,11 @@ mod tests {
 
     #[test]
     fn test_from_slice_or_panic() {
-        assert_eq!(CVec::<u8, 0>::from_slice_or_panic(&[]).as_slice(), &[]);
+        assert!(
+            CVec::<u8, 0>::from_slice_or_panic(&[])
+                .as_slice()
+                .is_empty()
+        );
         assert_eq!(
             CVec::<u8, 3>::from_slice_or_panic(&[1, 2, 3]).as_slice(),
             &[1, 2, 3]
@@ -1481,7 +1547,11 @@ mod tests {
 
     #[test]
     fn test_from_slice_or_crop() {
-        assert_eq!(CVec::<u8, 0>::from_slice_or_crop(&[1, 2]).as_slice(), &[]);
+        assert!(
+            CVec::<u8, 0>::from_slice_or_crop(&[1, 2])
+                .as_slice()
+                .is_empty()
+        );
         assert_eq!(
             CVec::<u8, 3>::from_slice_or_crop(&[1, 2, 3, 4]).as_slice(),
             &[1, 2, 3]
@@ -1497,7 +1567,7 @@ mod tests {
 
         let mut none: CVec<u8, 3> = cvec![1, 3; *; 3];
         none.retain(|_| false);
-        assert_eq!(none.as_slice(), &[]);
+        assert!(none.as_slice().is_empty());
     }
 
     #[test]
@@ -1521,7 +1591,7 @@ mod tests {
 
     #[test]
     fn test_from_array_as_full() {
-        assert_eq!(CVec::<u8, 0>::from_array_as_full(&[]).as_slice(), &[]);
+        assert!(CVec::<u8, 0>::from_array_as_full(&[]).as_slice().is_empty());
         assert_eq!(
             CVec::<u8, 3>::from_array_as_full(&[1, 2, 3]).as_slice(),
             &[1, 2, 3]
@@ -1581,7 +1651,7 @@ mod tests {
 
         let mut full: CVec<u8, 4> = cvec![0, 1, 2, 3; *; 4];
         full.remove_range(..);
-        assert_eq!(full.as_slice(), &[]);
+        assert!(full.as_slice().is_empty());
 
         let mut empty_prefix: CVec<u8, 4> = cvec![0, 1, 2, 3; *; 4];
         empty_prefix.remove_range(..0);
@@ -1641,15 +1711,16 @@ mod tests {
 
     #[test]
     fn test_from_elem() {
-        assert_eq!(CVec::<u8, 0>::from_elem(9).as_slice(), &[]);
+        assert!(CVec::<u8, 0>::from_elem(9).as_slice().is_empty());
         assert_eq!(CVec::<u8, 3>::from_elem(9).as_slice(), &[9, 9, 9]);
     }
 
     #[test]
     fn test_from_elem_up_to_or_panic() {
-        assert_eq!(
-            CVec::<u8, 3>::from_elem_up_to_or_panic(9, 0).as_slice(),
-            &[]
+        assert!(
+            CVec::<u8, 3>::from_elem_up_to_or_panic(9, 0)
+                .as_slice()
+                .is_empty()
         );
         assert_eq!(
             CVec::<u8, 3>::from_elem_up_to_or_panic(9, 2).as_slice(),
@@ -1662,7 +1733,7 @@ mod tests {
 
     #[test]
     fn test_map() {
-        assert_eq!(CVec::<u8, 0>::new().map(|n| n as u16).as_slice(), &[]);
+        assert!(CVec::<u8, 0>::new().map(|n| n as u16).as_slice().is_empty());
         assert_eq!(
             CVec::<u8, 3>::from_slice_or_panic(&[1, 2, 3])
                 .map(|n| n as u16 * 10)
@@ -1812,7 +1883,7 @@ mod tests {
         assert_eq!(cloned, copied);
         assert_eq!(collected, vec![1, 2, 3]);
         assert_eq!(borrowed, vec![1, 2, 3]);
-        assert_eq!(CVec::<u8, 2>::default().as_slice(), &[]);
+        assert!(CVec::<u8, 2>::default().as_slice().is_empty());
 
         let mut writer = CVec::<u8, 6>::new();
         write!(&mut writer, "abc{}", 'd').unwrap();
@@ -1829,5 +1900,49 @@ mod tests {
     fn test_debug() {
         let c = cvec!(1,2,3; *; 5);
         println!("{c:?}");
+    }
+}
+
+#[cfg(all(test, feature = "serde"))]
+mod tests_serde {
+    use super::*;
+    use serde_json;
+
+    #[test]
+    fn serde_round_trip() {
+        let mut v = CVec::<u32, 4>::new();
+        v.push_within_capacity(10).unwrap();
+        v.push_within_capacity(20).unwrap();
+        v.push_within_capacity(30).unwrap();
+
+        let json = serde_json::to_string(&v).unwrap();
+        assert_eq!(json, "[10,20,30]");
+
+        let decoded: CVec<u32, 4> = serde_json::from_str(&json).unwrap();
+        assert_eq!(decoded.as_slice(), &[10, 20, 30]);
+        assert_eq!(decoded.len(), 3);
+    }
+
+    #[test]
+    fn serde_empty_round_trip() {
+        let v = CVec::<u32, 4>::new();
+
+        let json = serde_json::to_string(&v).unwrap();
+        assert_eq!(json, "[]");
+
+        let decoded: CVec<u32, 4> = serde_json::from_str(&json).unwrap();
+        assert!(decoded.as_slice().is_empty());
+        assert_eq!(decoded.len(), 0);
+    }
+
+    #[test]
+    fn deserialize_fails_when_input_exceeds_capacity() {
+        let err = serde_json::from_str::<CVec<u32, 2>>("[1,2,3]").unwrap_err();
+        let msg = err.to_string();
+
+        assert!(
+            msg.contains("length") || msg.contains("too many elements"),
+            "unexpected error: {msg}"
+        );
     }
 }
