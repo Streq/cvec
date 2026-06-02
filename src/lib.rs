@@ -636,7 +636,7 @@ macro_rules! __define_cvec {
             }
 
             /// None if the iter contains more elements than the capacity
-            fn try_from_iter<I: IntoIterator<Item = T>>(iter: I) -> Option<Self> {
+            pub fn try_from_iter<I: IntoIterator<Item = T>>(iter: I) -> Option<Self> {
                 let mut ret = Self::new();
                 let mut i = 0;
                 for t in iter {
@@ -649,7 +649,7 @@ macro_rules! __define_cvec {
             }
             
             /// None if the iter contains more elements than the capacity
-            fn try_from<U: Into<T>, I: IntoIterator<Item = U>>(
+            pub fn try_from<U: Into<T>, I: IntoIterator<Item = U>>(
                 from: I,
             ) -> Option<Self> {
                 Self::try_from_iter(from.into_iter().map(|it|it.into()))
