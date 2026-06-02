@@ -8,8 +8,8 @@ use std::mem::MaybeUninit;
 use std::ops::{Add, AddAssign, Bound, Deref, Index, IndexMut, RangeBounds, Sub, SubAssign};
 use std::ptr::{copy_nonoverlapping, slice_from_raw_parts};
 use std::slice::Iter;
-use std::slice::{SliceIndex, from_raw_parts, from_raw_parts_mut};
-use std::str::{Utf8Error, from_utf8_unchecked};
+use std::slice::{from_raw_parts, from_raw_parts_mut, SliceIndex};
+use std::str::{from_utf8_unchecked, Utf8Error};
 use std::{ops, ptr};
 
 #[derive(Debug, Copy, Clone, Eq, PartialEq)]
@@ -635,6 +635,26 @@ macro_rules! __define_cvec {
                 $name::<U, N>::from_iter(self.into_iter().copied().map(f))
             }
 
+            /// None if the iter contains more elements than the capacity
+            fn try_from_iter<I: IntoIterator<Item = T>>(iter: I) -> Option<Self> {
+                let mut ret = Self::new();
+                let mut i = 0;
+                for t in iter {
+                    if i >= N {return None}
+                    ret.buf[i] = MaybeUninit::new(t);
+                    i += 1;
+                }
+                ret.len = i as $len_type;
+                Some(ret)
+            }
+            
+            /// None if the iter contains more elements than the capacity
+            fn try_from<U: Into<T>, I: IntoIterator<Item = U>>(
+                from: I,
+            ) -> Option<Self> {
+                Self::try_from_iter(from.into_iter().map(|it|it.into()))
+            }
+
         }
         /// Common methods for str handling
         impl<const N: usize> $name<u8, N> {
@@ -777,6 +797,7 @@ macro_rules! __define_cvec {
                 ret
             }
         }
+
         impl<T: Copy, const N: usize> Copy for $name<T, N> {}
         impl<T: Copy + Eq, const N: usize> Eq for $name<T, N> {}
 
@@ -899,7 +920,6 @@ macro_rules! __define_cvec {
                 deserializer.deserialize_seq(CVecVisitor::<T, N>(core::marker::PhantomData))
             }
         }
-
 
 
         __impl_cvec_eq! { $name, CVec8 }
@@ -1168,9 +1188,9 @@ impl_lentype!(u8, u16, u32, u64, usize);
 #[cfg(test)]
 mod tests {
     use crate::cvec::cvec;
-    use crate::{CVec, CVec8, CVec16, InsertionErr};
+    use crate::{CVec, CVec16, CVec8, InsertionErr};
     use core::fmt::Write as _;
-    use std::panic::{AssertUnwindSafe, catch_unwind};
+    use std::panic::{catch_unwind, AssertUnwindSafe};
     use std::ptr::slice_from_raw_parts;
 
     fn assert_panics(f: impl FnOnce()) {
@@ -1946,3 +1966,8 @@ mod tests_serde {
         );
     }
 }
+
+enum CVecConversionError {
+    TooBig(usize),
+}
+
