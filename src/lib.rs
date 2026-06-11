@@ -3,13 +3,14 @@ use ops::DerefMut;
 use std::array::IntoIter;
 use std::borrow::Cow;
 use std::fmt::{Debug, Display, Formatter};
+use std::hash::{Hash, Hasher};
 use std::iter::{Map, Take};
 use std::mem::MaybeUninit;
 use std::ops::{Add, AddAssign, Bound, Deref, Index, IndexMut, RangeBounds, Sub, SubAssign};
 use std::ptr::{copy_nonoverlapping, slice_from_raw_parts};
 use std::slice::Iter;
-use std::slice::{from_raw_parts, from_raw_parts_mut, SliceIndex};
-use std::str::{from_utf8_unchecked, Utf8Error};
+use std::slice::{SliceIndex, from_raw_parts, from_raw_parts_mut};
+use std::str::{Utf8Error, from_utf8_unchecked};
 use std::{ops, ptr};
 
 #[derive(Debug, Copy, Clone, Eq, PartialEq)]
@@ -647,7 +648,7 @@ macro_rules! __define_cvec {
                 ret.len = i as $len_type;
                 Some(ret)
             }
-            
+
             /// None if the iter contains more elements than the capacity
             pub fn try_from<U: Into<T>, I: IntoIterator<Item = U>>(
                 from: I,
@@ -976,6 +977,12 @@ macro_rules! __define_cvec {
                 Ok(())
             }
         }
+
+        impl<T: Hash + Copy, const N: usize> Hash for $name<T, N> {
+            fn hash<H: Hasher>(&self, state: &mut H) {
+                Hash::hash(&**self, state)
+            }
+        }
     };
 }
 
@@ -1188,9 +1195,9 @@ impl_lentype!(u8, u16, u32, u64, usize);
 #[cfg(test)]
 mod tests {
     use crate::cvec::cvec;
-    use crate::{CVec, CVec16, CVec8, InsertionErr};
+    use crate::{CVec, CVec8, CVec16, InsertionErr};
     use core::fmt::Write as _;
-    use std::panic::{catch_unwind, AssertUnwindSafe};
+    use std::panic::{AssertUnwindSafe, catch_unwind};
     use std::ptr::slice_from_raw_parts;
 
     fn assert_panics(f: impl FnOnce()) {
@@ -1970,4 +1977,3 @@ mod tests_serde {
 enum CVecConversionError {
     TooBig(usize),
 }
-
